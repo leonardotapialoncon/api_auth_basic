@@ -1,5 +1,6 @@
 import db from '../dist/db/models/index.js';
 import bcrypt from 'bcrypt';
+import { Op } from 'sequelize';
 
 const createUser = async (req) => {
     const {
@@ -55,7 +56,7 @@ const getUserById = async (id) => {
 }
 
 const updateUser = async (req) => {
-    const user = db.User.findOne({
+    const user = await db.User.findOne({
         where: {
             id: req.params.id,
             status: true,
@@ -78,18 +79,13 @@ const updateUser = async (req) => {
 }
 
 const deleteUser = async (id) => {
-    /* await db.User.destroy({
-        where: {
-            id: id
-        }
-    }); */
-    const user = db.User.findOne({
+    const user = await db.User.findOne({
         where: {
             id: id,
             status: true,
         }
     });
-    await  db.User.update({
+    await db.User.update({
         status: false
     }, {
         where: {
@@ -102,9 +98,54 @@ const deleteUser = async (id) => {
     };
 }
 
+// Nuevas funciones agregadas
+
+const getAllUsers = async () => {
+    try {
+        const users = await db.User.findAll({ where: { status: true } });
+        return { code: 200, message: users };
+    } catch (error) {
+        return { code: 500, message: error.message };
+    }
+};
+
+const findUsers = async (query) => {
+    const { deleted, name, lastLoginBefore, lastLoginAfter } = query;
+    const whereClause = {};
+
+    if (deleted !== undefined) whereClause.status = deleted !== 'true';
+    if (name) whereClause.name = { [Op.like]: `%${name}%` };
+    if (lastLoginBefore) whereClause.lastLogin = { [Op.lt]: new Date(lastLoginBefore) };
+    if (lastLoginAfter) whereClause.lastLogin = { [Op.gt]: new Date(lastLoginAfter) };
+
+    try {
+        const users = await db.User.findAll({ where: whereClause });
+        return { code: 200, message: users };
+    } catch (error) {
+        return { code: 500, message: error.message };
+    }
+};
+
+const bulkCreateUsers = async (users) => {
+    const results = { success: 0, failure: 0, errors: [] };
+    for (const user of users) {
+        try {
+            await db.User.create(user);
+            results.success += 1;
+        } catch (error) {
+            results.failure += 1;
+            results.errors.push({ user, error: error.message });
+        }
+    }
+    return { code: 200, message: results };
+};
+
 export default {
     createUser,
     getUserById,
     updateUser,
     deleteUser,
-}
+    getAllUsers,
+    findUsers,
+    bulkCreateUsers,
+};
